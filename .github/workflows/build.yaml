@@ -35,4 +35,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ vars.IMG_NAME }}/${{ inputs.version }}
+          tags: ${{ vars.IMG_NAME  }}:${{ inputs.version }}
