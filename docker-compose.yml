@@ -1,0 +1,18 @@
+services:
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_NAME=demo
+      - PGHOST=host.docker.internal
+      - PGPORT=5432
+      - PGDATABASE=demo
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - S3_BUCKET=backup
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=admin
+      - AWS_DEFAULT_REGION=ap-southeast-1
+      - USE_MINIO=true
+      - MINIO_ENDPOINT=http://host.docker.internal:9000
