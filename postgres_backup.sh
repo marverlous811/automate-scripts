@@ -18,6 +18,39 @@ set -e
 # - AWS_DEFAULT_REGION: AWS region (when using AWS S3)
 # - USE_MINIO: Set to "true" if using MinIO instead of AWS S3 (optional)
 # - MINIO_ENDPOINT: MinIO server endpoint URL (required when USE_MINIO=true)
+#
+# Usage:
+#   postgres_backup.sh           Run backup and upload
+#   postgres_backup.sh --check   Validate configuration and print it (secrets
+#                                masked) without dumping or uploading anything
+
+CHECK_MODE=false
+if [ "$1" = "--check" ]; then
+    CHECK_MODE=true
+fi
+
+# Print "****" for a set secret, "(not set)" otherwise; never prints the value
+mask_secret() {
+    if [ -n "$1" ]; then
+        echo "****"
+    else
+        echo "(not set)"
+    fi
+}
+
+# In check mode, report exactly which required variables are missing
+if [ "$CHECK_MODE" = "true" ]; then
+    MISSING_VARS=""
+    for VAR_NAME in SERVICE_NAME PGHOST PGDATABASE PGUSER PGPASSWORD S3_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+        if [ -z "${!VAR_NAME}" ]; then
+            MISSING_VARS="${MISSING_VARS} ${VAR_NAME}"
+        fi
+    done
+    if [ -n "$MISSING_VARS" ]; then
+        echo "Error: Missing required environment variables:${MISSING_VARS}"
+        exit 1
+    fi
+fi
 
 # Check if required environment variables are set
 if [ -z "$SERVICE_NAME" ] || [ -z "$PGDATABASE" ] || [ -z "$PGUSER" ] || \
@@ -38,6 +71,39 @@ fi
 PGPORT=${PGPORT:-5432}
 AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
 USE_MINIO=${USE_MINIO:-false}
+
+# Check mode: print normalized configuration and exit without side effects
+# (no pg_dump, no backup files, no upload)
+if [ "$CHECK_MODE" = "true" ]; then
+    CHECK_ZIP_FILE="${SERVICE_NAME}-$(date +%Y%m%d).sql.gz"
+    if [ -z "$S3_PREFIX" ]; then
+        CHECK_DESTINATION="s3://${S3_BUCKET}/${CHECK_ZIP_FILE}"
+    else
+        CHECK_DESTINATION="s3://${S3_BUCKET}/${S3_PREFIX}/${CHECK_ZIP_FILE}"
+    fi
+    if [ "${USE_MINIO}" = "true" ]; then
+        CHECK_STORAGE_TYPE="MinIO"
+    else
+        CHECK_STORAGE_TYPE="AWS S3"
+    fi
+    echo "Configuration check passed"
+    echo "SERVICE_NAME=${SERVICE_NAME}"
+    echo "PGHOST=${PGHOST}"
+    echo "PGPORT=${PGPORT}"
+    echo "PGDATABASE=${PGDATABASE}"
+    echo "PGUSER=${PGUSER}"
+    echo "PGPASSWORD=$(mask_secret "$PGPASSWORD")"
+    echo "S3_BUCKET=${S3_BUCKET}"
+    echo "S3_PREFIX=${S3_PREFIX}"
+    echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+    echo "AWS_SECRET_ACCESS_KEY=$(mask_secret "$AWS_SECRET_ACCESS_KEY")"
+    echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
+    echo "USE_MINIO=${USE_MINIO}"
+    echo "MINIO_ENDPOINT=${MINIO_ENDPOINT}"
+    echo "STORAGE_TYPE=${CHECK_STORAGE_TYPE}"
+    echo "S3_DESTINATION=${CHECK_DESTINATION}"
+    exit 0
+fi
 
 # Set the backup date format (YYYYMMDD)
 BACKUP_DATE=$(date +%Y%m%d)
